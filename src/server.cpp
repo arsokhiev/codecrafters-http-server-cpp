@@ -8,6 +8,49 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+ssize_t receive(int client_fd, std::string& return_client_command)
+{
+    return recv(client_fd, (void*)&return_client_command[0], return_client_command.size(), 0);
+}
+
+void find_path_from_request(std::string& path, const std::string& string_request)
+{
+    size_t method_end = string_request.find(' ');
+    if (method_end != std::string::npos)
+    {
+        size_t start = method_end + 1;
+        size_t end = string_request.find(' ', start);
+
+        if (end != std::string::npos)
+        {
+            path = string_request.substr(start, end - start);
+        }
+    }
+}
+
+ssize_t send(int client_fd, const std::string& response_message)
+{
+    return send(client_fd, response_message.c_str(), response_message.length(), 0);
+}
+
+void make_response(std::string& response_message, const std::string& path)
+{
+    if (path == "/")
+    {
+        response_message = "HTTP/1.1 200 OK\r\n\r\n";
+    }
+    else if(path.find("/echo/") == 0)
+    {
+        std::string content = path.substr(6);
+        response_message = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: "
+                + std::to_string(content.size()) + "\r\n\r\n" + content;
+    }
+    else
+    {
+        response_message = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+    }
+}
+
 int main(int argc, char** argv) {
 	// Flush after every std::cout / std::cerr
 	std::cout << std::unitbuf;
@@ -51,8 +94,12 @@ int main(int argc, char** argv) {
 	int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&client_addr_len);
     std::cout << "Client connected\n";
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     std::string string_request(1024, '\0');
-    if (recv(client_fd, (void*)&string_request[0], string_request.size(), 0) == -1)
+    std::string path, response_message;
+
+    if (receive(client_fd, string_request) == -1)
     {
         std::cerr << "Error receiving message from client\n";
         close(server_fd);
@@ -60,11 +107,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    //std::string response_message = string_request.starts_with("GET / HTTP/1.1\r\n") ? "HTTP/1.1 200 OK\r\n\r\n" : "HTTP/1.1 404 Not Found\r\n\r\n" ;
-    std::string response_message = std::string("HTTP/1.1 ") + std::string((string_request[5] == ' '?"200 OK\r\n\r\n":"404 Not Found\r\n\r\n"));
-    send(client_fd, response_message.c_str(), response_message.length(), 0);
+    find_path_from_request(path, string_request);
+    make_response(response_message, path);
+
+    send(client_fd, response_message);
 
 	close(server_fd);
-
+    close(client_fd);
 	return 0;
 }
