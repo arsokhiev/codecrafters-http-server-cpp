@@ -7,6 +7,10 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <list>
+#include <thread>
+
+std::list<int> g_connections;
 
 ssize_t receive(int client_fd, std::string& return_client_command)
 {
@@ -87,6 +91,34 @@ ssize_t send(int client_fd, const std::string& response_message)
     return send(client_fd, response_message.c_str(), response_message.length(), 0);
 }
 
+void add_connection(int client_fd)
+{
+    g_connections.push_back(client_fd);
+}
+
+void client_handler(int client_fd)
+{
+    std::string string_request(1024, '\0');
+    std::string path, user_agent_value, response_message;
+
+    if (receive(client_fd, string_request) == -1)
+    {
+        std::cerr << "Error receiving message from client\n";
+        close(client_fd);
+        return;
+    }
+
+    find_path_from_request(path, string_request);
+    read_user_agent(user_agent_value, string_request);
+
+    make_response(response_message, path, user_agent_value);
+    //std::cout << "\n\n\nresponse_message:\n" << response_message << "\n\n\n";
+
+    send(client_fd, response_message);
+
+    close(client_fd);
+}
+
 int main(int argc, char** argv)
 {
 	// Flush after every std::cout / std::cerr
@@ -130,33 +162,18 @@ int main(int argc, char** argv)
 	struct sockaddr_in client_addr;
 	int client_addr_len = sizeof(client_addr);
 
-	std::cout << "Waiting for a client to connect...\n";
+    while (true)
+    {
+	    std::cout << "Waiting for a client to connect...\n";
 
-	int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&client_addr_len);
-    std::cout << "Client connected\n";
+	    int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&client_addr_len);
+        std::cout << "Client connected\n";
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    std::string string_request(1024, '\0');
-    std::string path, user_agent_value, response_message;
-
-    if (receive(client_fd, string_request) == -1)
-    {
-        std::cerr << "Error receiving message from client\n";
-        close(server_fd);
-        close(client_fd);
-        return 1;
+        client_handler(client_fd);
     }
 
-    find_path_from_request(path, string_request);
-    read_user_agent(user_agent_value, string_request);
-
-    make_response(response_message, path, user_agent_value);
-    std::cout << "\n\n\nresponse_message:\n" << response_message << "\n\n\n";
-
-    send(client_fd, response_message);
-
-	close(server_fd);
-    close(client_fd);
+    close(server_fd);
 	return 0;
 }
