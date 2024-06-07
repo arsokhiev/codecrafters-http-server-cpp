@@ -30,11 +30,13 @@ void find_path_from_request(std::string& path, const std::string& string_request
 
 void read_user_agent(std::string& user_agent_value, const std::string& string_request)
 {
-    size_t user_agent_end_pos= string_request.find_last_of("User-Agent: ");
-    if (user_agent_end_pos != std::string::npos)
+    size_t user_agent_pos= string_request.find("User-Agent: ");
+    size_t user_agent_end_pos = user_agent_pos + 12;
+
+    if (user_agent_pos != std::string::npos)
     {
-        size_t start = user_agent_end_pos + 1;
-        size_t end = string_request.find("\r\n", start);
+        size_t start = user_agent_end_pos;
+        size_t end = string_request.find('\r', start);
 
         if (end != std::string::npos)
         {
@@ -49,7 +51,7 @@ void make_response(std::string& response_message, const std::string& path, const
     {
         response_message = "HTTP/1.1 200 OK\r\n\r\n";
     }
-    else if(path.find("/echo/") == 0)
+    else if (path.find("/echo/") == 0)
     {
         std::string content = path.substr(6);
         response_message =
@@ -59,7 +61,18 @@ void make_response(std::string& response_message, const std::string& path, const
                 // Headers
                 "Content-Type: text/plain\r\n"
                 "Content-Length: "
-                + std::to_string(content.size()) + "\r\n\r\n" + content
+                + std::to_string(content.size()) + "\r\n\r\n" + content;
+    }
+    else if (!user_agent_value.empty())
+    {
+        response_message =
+                // Status line
+                "HTTP/1.1 200 OK"
+                "\r\n"
+                // Headers
+                "Content-Type: text/plain\r\n"
+                "Content-Length: "
+                + std::to_string(user_agent_value.size()) + "\r\n\r\n"
                 // Response body
                 + user_agent_value;
     }
@@ -139,6 +152,7 @@ int main(int argc, char** argv)
     read_user_agent(user_agent_value, string_request);
 
     make_response(response_message, path, user_agent_value);
+    std::cout << "\n\n\nresponse_message:\n" << response_message << "\n\n\n";
 
     send(client_fd, response_message);
 
