@@ -28,12 +28,22 @@ void find_path_from_request(std::string& path, const std::string& string_request
     }
 }
 
-ssize_t send(int client_fd, const std::string& response_message)
+void read_user_agent(std::string& user_agent_value, const std::string& string_request)
 {
-    return send(client_fd, response_message.c_str(), response_message.length(), 0);
+    size_t user_agent_end_pos= string_request.find_last_of("User-Agent: ");
+    if (user_agent_end_pos != std::string::npos)
+    {
+        size_t start = user_agent_end_pos + 1;
+        size_t end = string_request.find("\r\n", start);
+
+        if (end != std::string::npos)
+        {
+            user_agent_value = string_request.substr(start, end - start);
+        }
+    }
 }
 
-void make_response(std::string& response_message, const std::string& path)
+void make_response(std::string& response_message, const std::string& path, const std::string& user_agent_value)
 {
     if (path == "/")
     {
@@ -51,12 +61,17 @@ void make_response(std::string& response_message, const std::string& path)
                 "Content-Length: "
                 + std::to_string(content.size()) + "\r\n\r\n" + content
                 // Response body
-                + ;
+                + user_agent_value;
     }
     else
     {
         response_message = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
     }
+}
+
+ssize_t send(int client_fd, const std::string& response_message)
+{
+    return send(client_fd, response_message.c_str(), response_message.length(), 0);
 }
 
 int main(int argc, char** argv)
@@ -110,7 +125,7 @@ int main(int argc, char** argv)
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     std::string string_request(1024, '\0');
-    std::string path, response_message;
+    std::string path, user_agent_value, response_message;
 
     if (receive(client_fd, string_request) == -1)
     {
@@ -121,7 +136,9 @@ int main(int argc, char** argv)
     }
 
     find_path_from_request(path, string_request);
-    make_response(response_message, path);
+    read_user_agent(user_agent_value, string_request);
+
+    make_response(response_message, path, user_agent_value);
 
     send(client_fd, response_message);
 
